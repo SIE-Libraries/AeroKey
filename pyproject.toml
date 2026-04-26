@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel", "pybind11>=2.12"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aerokey"
+version = "0.2.0"
+description = "Aero Key Python bindings powered by pybind11"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+  { name = "AeroKey Contributors" }
+]
+
+[tool.setuptools.packages.find]
+include = ["aerokey*"]

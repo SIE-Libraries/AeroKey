@@ -1,39 +1,99 @@
-🗝️ Aero KeyThe Universal NoSQL Standard Connector for C++Aero Key is a high-performance, standardized abstraction layer for NoSQL databases. It allows developers to write database-agnostic code, enabling seamless switching between Redis, MongoDB, Firestore, and AWS DynamoDB with zero refactoring.🚀 The "One-Line Swap" PhilosophyAero Key is built on the principle that your business logic shouldn't be held hostage by your database driver. By standardizing the connection and interaction patterns, you can migrate from a local Redis cache to a global Firestore instance by changing a single parameter.
-🛠️ Core API Reference
-1. AeroUrlThe configuration object that encapsulates the connection string and security credentials.
-Signature: AeroUrl(std::string url, std::string key)
-   2. AeroFetchRetrieves data from the specified provider.
-   Signature: AeroFetch(AeroType type, AeroUrl url)Returns: A standardized AeroResponse object.
-3. AeroPushInserts or updates data across any supported NoSQL backend.
-   Signature: AeroPush(AeroType type, AeroUrl url, AeroPayload payload)
-   Function: Translates the AeroPayload into the native format (BSON, JSON, or Key-Value pairs)
-   4. AeroStreamAn asynchronous, functional interface for processing data as a continuous stream.
-   Signature: AeroStream(AeroUrl url, AeroType type, std::functional<void(AeroData)> func)💻 Code Example#include "aero_key.h"
+# 🗝️ Aero Key
 
-// Initialize connection details
-AeroUrl myDb("[https://project-id.firebaseio.com](https://project-id.firebaseio.com)", "AIzaSy...auth-key");
+The Universal NoSQL Standard Connector for C++.
 
-// --- THE ONE-LINE SWAP ---
-// Switch between AeroType::Redis, MongoDB, FireStore, or AWS
-AeroType currentStack = AeroType::FireStore; 
+Aero Key provides a backend-agnostic API for key/value-style NoSQL operations and now includes:
 
-// 1. Push data
-AeroPayload userRecord = {{"id", "001"}, {"name", "AeroUser"}};
-AeroPush(currentStack, myDb, userRecord);
+- provider abstraction (`IAeroProvider`) for pluggable backends,
+- structured error/status model (`AeroStatus`, `AeroError`),
+- **real Redis provider** (`AeroType::Redis`) via TCP + RESP,
+- **real Mongo provider** (`AeroType::MongoDB`) via `mongosh`,
+- **real Firestore provider** (`AeroType::FireStore`) via REST (`curl`),
+- in-memory default provider for `AeroType::AWSDynamoDB` in local/dev mode,
+- pybind11 bindings for Python usage.
 
-// 2. Fetch data
-auto result = AeroFetch(currentStack, myDb);
+## 🛠️ Core API
 
-// 3. Stream data
-AeroStream(myDb, currentStack, [](AeroData data) {
-    std::cout << "Streaming Record: " << data["name"] << std::endl;
-});
-🏗️ Supported Backends
-AeroTypeDatabaseProtocolRedisRedisIn-Memory / RESPMongoDBMongoDBDocument / BSONFireStoreGoogle FirestoreDocument / GRPCAWSDynamoDBKey-Value / HTTP
-🎯 Why Aero Key?
-Vendor Agnostic: Stop writing boilerplate for specific SDKs.Modern C++: Heavy use of std::functional and type-safe enums.
-Efficiency: 
-Built-in AeroStream ensures memory-efficient handling of large datasets.
-Security: AeroUrl keeps keys and endpoints encapsulated and away from your logic.
-📜 License
+- `AeroPush(AeroType, AeroUrl, AeroPayload) -> AeroWriteResult`
+- `AeroFetch(AeroType, AeroUrl) -> AeroResponse`
+- `AeroStream(AeroUrl, AeroType, callback) -> AeroError`
+- `RegisterProvider(AeroType, std::shared_ptr<IAeroProvider>)`
+- `ResetProviders()`
+
+## Provider notes
+
+### Redis (`AeroType::Redis`)
+- Endpoint: `redis://host:port` (port defaults to `6379`).
+- Push: `HSET` (requires `url.key` or payload `"id"`).
+- Fetch: `HGETALL` (requires `url.key`).
+
+### MongoDB (`AeroType::MongoDB`)
+- Uses `mongosh` executable.
+- Endpoint should be a Mongo connection string, e.g. `mongodb://localhost:27017`.
+- Uses database `aerokey`, collection `records`, and document `_id = url.key`.
+
+### Firestore (`AeroType::FireStore`)
+- Uses `curl` with Firestore REST API.
+- Endpoint should be a document collection URL, e.g.  
+  `https://firestore.googleapis.com/v1/projects/<project>/databases/(default)/documents/aerokey`
+- Document ID is `url.key`.
+
+## 💻 C++ Example
+
+```cpp
+#include "aero_key.h"
+
+using namespace aerokey;
+
+// Uses in-memory default provider for local run.
+AeroUrl url("memory://demo", "user:1");
+auto write = AeroPush(AeroType::AWSDynamoDB, url, {{"id", "1"}, {"name", "AeroUser"}});
+if (!write.error.ok()) {
+    // handle error
+}
+
+auto response = AeroFetch(AeroType::AWSDynamoDB, url);
+if (response.error.ok()) {
+    // use response.records
+}
+```
+
+## 🐍 Python (pybind11)
+
+```python
+from aerokey import AeroType, AeroUrl, AeroPush, AeroFetch
+
+url = AeroUrl("redis://127.0.0.1:6379", "user:1")
+write = AeroPush(AeroType.Redis, url, {"id": "1", "name": "AeroUser"})
+print(write.error.code)
+
+resp = AeroFetch(AeroType.Redis, url)
+print(resp.records)
+```
+
+## 🔧 Local Build & Test
+
+```bash
+# C++ demo
+g++ -std=c++17 -Wall -Wextra -pedantic -Iinclude src/aero_key.cpp examples/main.cpp -o aerokey_demo
+./aerokey_demo
+
+# C++ core tests
+g++ -std=c++17 -Wall -Wextra -pedantic -Iinclude src/aero_key.cpp tests/test_core.cpp -o aerokey_tests
+./aerokey_tests
+
+# Python package (builds pybind11 extension)
+python -m pip install .
+```
+
+## 🤖 GitHub Actions
+
+CI workflow at `.github/workflows/ci.yml` runs:
+
+- C++ demo compile + run
+- C++ test compile + run
+- `pip install .` + Python import smoke test
+
+## 📜 License
+
 Licensed under the MIT License.
